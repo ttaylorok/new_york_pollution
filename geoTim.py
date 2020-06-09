@@ -74,3 +74,42 @@ def transform_multi(project, x):
         return MultiPolygon(gs)
     else:
         return transform(project,x)
+    
+def transform_geos(df1, df2, id1, id2, col2, mode):
+    '''
+    col2: column to transform
+    mode: 
+        mean is area weighted mean
+        sum is sum??
+    '''
+    overlap = []
+    for row1 in df1.iterrows():
+        geo1 = row1[1]['geometry']
+        #print(row_cd[1]['BoroCD'])
+        for row2 in df2.iterrows():
+            geo2 = row2[1]['geometry']
+            i = geo1.intersection(geo2)
+            #print(i)
+            if not i.is_empty:
+                #print(i.area)
+                overlap.append({id1 : row1[1][id1],
+                                id2 : row2[1][id2],
+                                'area_overlap' : i.area,
+                                'geo2_area' : geo2.area,
+                                col2 : row2[1][col2]})
+    df_overlap = pd.DataFrame(overlap, columns = [id1, id2, 'area_overlap', 'geo2_area', col2])
+    if mode == 'mean':
+        df_overlap['total_overlap'] = df_overlap.groupby(id1)['area_overlap'].transform(sum)
+        df_overlap['percentage'] = df_overlap['area_overlap']/df_overlap['total_overlap']
+        partial = 'partial_' + col2
+        df_overlap[partial] = df_overlap[col2] * df_overlap['percentage']
+        df_out = pd.DataFrame(df_overlap.groupby(id1)[partial].sum()).reset_index()
+        df_out.rename(columns = {partial : col2}, inplace = True)
+        return df_out
+    elif mode == 'sum':
+        df_overlap['partial'] = (df_overlap['area_overlap'] / df_overlap['geo2_area']) * df_overlap[col2]
+        df_out = pd.DataFrame(df_overlap.groupby(id1)['partial'].sum()).reset_index()
+        df_out.rename(columns = {'partial' : col2}, inplace = True)
+        return df_out
+    else:
+        raise Exception("Mode must be 'mean' or 'sum'.")
